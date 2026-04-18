@@ -51,5 +51,8 @@
         ]
     },
 
-    "debug_mode": false
+    "debug_mode": false,
+
+    // Secret key for hostname cloaking. Generate with: openssl rand -hex 32
+    "cloak_key": "replace-with-your-secret-key"
 }
