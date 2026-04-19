@@ -14,32 +14,44 @@ A single services instance serves the entire network. It is discovered automatic
 
 ## What You Need
 
-- A TLS certificate and private key for the services node (`services.pem`, `services.key`)
-- A CA certificate shared with all other nodes (`ca_cert.pem`)
-- The certificate's SHA-1 fingerprint (for `network.conf`)
+- A private CA certificate and key (for signing inter-node certs)
+- A TLS certificate and private key for the services node (`services.crt`, `services.key`)
+- A TLS certificate and private key for the IRC server's gossip port (`client.crt`, `client.key`)
+- The SHA-1 fingerprint of each cert (for `network.conf`)
 - A writable directory for the database and logs
+
+> **Important:** The gossip network uses a **private CA you control** — not Let's Encrypt or any public CA. The inter-node port (6668) is internal Docker-to-Docker communication and never needs a publicly trusted certificate. Your Caddy/Let's Encrypt certificate is only used for IRC client connections on port 6697.
 
 ---
 
-## Step 1: Generate a TLS Certificate for Services
+## Step 1: Create a Private CA and Sign Node Certificates
 
-The services node needs its own certificate, signed by the same CA as your IRC server.
-
-If you are using a self-signed CA for inter-node communication:
+All nodes on the gossip network must share the same CA. You create it once and sign a certificate for each node.
 
 ```bash
-# Generate a private key and self-signed certificate for services
-openssl req -x509 -newkey rsa:4096 \
-    -keyout certs/services.key \
-    -out certs/services.pem \
-    -days 3650 -nodes \
-    -subj "/CN=services.example.com"
+# Create the private CA
+openssl genrsa -out certs/ca.key 4096
+openssl req -x509 -new -nodes -key certs/ca.key -sha256 -days 3650 \
+    -out certs/ca_cert.pem -subj "/CN=sable-ca"
 
-# Get the SHA-1 fingerprint (needed for network.conf)
-openssl x509 -in certs/services.pem -fingerprint -sha1 -noout
-# Output: SHA1 Fingerprint=AB:CD:EF:...
-# Remove colons: abcdef...
+# Sign the IRC server's gossip certificate
+openssl genrsa -out certs/client.key 4096
+openssl req -new -key certs/client.key -out certs/client.csr -subj "/CN=irc.example.com"
+openssl x509 -req -in certs/client.csr -CA certs/ca_cert.pem -CAkey certs/ca.key \
+    -CAcreateserial -out certs/client.crt -days 3650
+
+# Sign the services certificate
+openssl genrsa -out certs/services.key 4096
+openssl req -new -key certs/services.key -out certs/services.csr -subj "/CN=services.example.com"
+openssl x509 -req -in certs/services.csr -CA certs/ca_cert.pem -CAkey certs/ca.key \
+    -CAcreateserial -out certs/services.crt -days 3650
+
+# Get SHA-1 fingerprints (needed for network.conf)
+openssl x509 -in certs/client.crt -fingerprint -sha1 -noout | tr -d ':' | sed 's/SHA1 Fingerprint=//' | tr '[:upper:]' '[:lower:]'
+openssl x509 -in certs/services.crt -fingerprint -sha1 -noout | tr -d ':' | sed 's/SHA1 Fingerprint=//' | tr '[:upper:]' '[:lower:]'
 ```
+
+Keep `certs/ca.key` safe — you need it to sign certificates for any new nodes.
 
 ---
 
@@ -150,7 +162,7 @@ After deployment, your project directory should look like:
 │   └── network_config.json   # Runtime config (opers, alias users, cloak key)
 ├── certs/
 │   ├── ca_cert.pem           # Shared CA certificate
-│   ├── services.pem          # Services TLS certificate
+│   ├── services.crt          # Services TLS certificate
 │   ├── services.key          # Services private key
 │   ├── server.crt            # IRC server TLS certificate
 │   └── server.key            # IRC server private key
@@ -179,7 +191,7 @@ Ensure `builtin:founder`, `builtin:op`, and `builtin:voice` are all defined in `
 - Verify both containers are on the same Docker network (`sable-net`).
 - Verify the `name` in `network.conf` exactly matches `server_name` in `services.conf`.
 - Verify the `address` in `network.conf` uses the Docker service name (`sable-services:6668`).
-- Check that the certificate fingerprint in `network.conf` matches the actual cert: `openssl x509 -in certs/services.pem -fingerprint -sha1 -noout`.
+- Check that the certificate fingerprint in `network.conf` matches the actual cert: `openssl x509 -in certs/services.crt -fingerprint -sha1 -noout`.
 
 **TLS handshake errors between nodes**
 - Ensure all nodes use certificates signed by the same CA (`ca_cert.pem`).
