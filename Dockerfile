@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for Sable IRC Server
 # Stage 1: Build environment
 FROM rust:1.83-slim AS builder
@@ -17,7 +18,10 @@ WORKDIR /build
 COPY . .
 
 # Build the project in release mode
-RUN cargo build --release --bins
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release --bins && \
+    cp target/release/sable_ircd target/release/listener_process target/release/auth_client /tmp/
 
 # Stage 2: Runtime environment
 FROM debian:bookworm-slim
@@ -35,9 +39,9 @@ RUN useradd -r -s /bin/false -d /sable sable && \
     chown -R sable:sable /sable
 
 # Copy binaries from builder
-COPY --from=builder /build/target/release/sable_ircd /usr/local/bin/
-COPY --from=builder /build/target/release/listener_process /usr/local/bin/
-COPY --from=builder /build/target/release/auth_client /usr/local/bin/
+COPY --from=builder /tmp/sable_ircd /usr/local/bin/
+COPY --from=builder /tmp/listener_process /usr/local/bin/
+COPY --from=builder /tmp/auth_client /usr/local/bin/
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
