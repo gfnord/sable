@@ -35,21 +35,37 @@ openssl req -x509 -new -nodes -key certs/ca.key -sha256 -days 3650 \
     -out certs/ca_cert.pem -subj "/CN=sable-ca"
 
 # Sign the IRC server's gossip certificate
+# The subjectAltName must match the server's `name` field in network.conf exactly
+cat > /tmp/ircd_ext.cnf << 'EOF'
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+subjectAltName = DNS:irc.example.com
+EOF
+
 openssl genrsa -out certs/client.key 4096
 openssl req -new -key certs/client.key -out certs/client.csr -subj "/CN=irc.example.com"
 openssl x509 -req -in certs/client.csr -CA certs/ca_cert.pem -CAkey certs/ca.key \
-    -CAcreateserial -out certs/client.crt -days 3650
+    -CAcreateserial -out certs/client.crt -days 3650 -extfile /tmp/ircd_ext.cnf
 
 # Sign the services certificate
+# The subjectAltName must match the services `name` field in network.conf exactly
+cat > /tmp/svc_ext.cnf << 'EOF'
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+subjectAltName = DNS:services.example.com
+EOF
+
 openssl genrsa -out certs/services.key 4096
 openssl req -new -key certs/services.key -out certs/services.csr -subj "/CN=services.example.com"
 openssl x509 -req -in certs/services.csr -CA certs/ca_cert.pem -CAkey certs/ca.key \
-    -CAcreateserial -out certs/services.crt -days 3650
+    -CAcreateserial -out certs/services.crt -days 3650 -extfile /tmp/svc_ext.cnf
 
 # Get SHA-1 fingerprints (needed for network.conf)
 openssl x509 -in certs/client.crt -fingerprint -sha1 -noout | tr -d ':' | sed 's/SHA1 Fingerprint=//' | tr '[:upper:]' '[:lower:]'
 openssl x509 -in certs/services.crt -fingerprint -sha1 -noout | tr -d ':' | sed 's/SHA1 Fingerprint=//' | tr '[:upper:]' '[:lower:]'
 ```
+
+> **Important:** The `subjectAltName` in each certificate must exactly match the `name` field for that peer in `network.conf`. rustls enforces SAN matching and will reject certificates that only have a CN. The certs must also be X.509 v3 (ensured by the `-extfile` flag above).
 
 Keep `certs/ca.key` safe — you need it to sign certificates for any new nodes.
 
