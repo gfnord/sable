@@ -30,6 +30,17 @@ async fn handle_register(
                 "Channel {} successfully registered",
                 channel.name()
             ));
+
+            // Op the founder if they're currently in the channel
+            let membership_id = MembershipId::new(source.user.id(), channel.id());
+            if cmd.network().membership(membership_id).is_ok() {
+                let detail = event::MembershipFlagChange {
+                    changed_by: source.user.id().into(),
+                    added: MembershipFlagFlag::Op.into(),
+                    removed: MembershipFlagSet::new(),
+                };
+                cmd.new_event_with_response(membership_id, detail).await;
+            }
         }
         Ok(RemoteServerResponse::Services(RemoteServicesServerResponse::AlreadyExists)) => {
             cmd.notice(format_args!(

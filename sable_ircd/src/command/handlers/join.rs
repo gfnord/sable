@@ -28,7 +28,19 @@ async fn handle_join(
             Ok(channel) => {
                 server.policy().can_join(source.as_ref(), &channel, key)?;
 
-                (channel.id(), MembershipFlagSet::new())
+                let mut flags = MembershipFlagSet::new();
+
+                if let Some(registration) = channel.is_registered() {
+                    if let Ok(Some(account)) = source.user.account() {
+                        if let Some(access) = account.has_access_in(registration.id()) {
+                            if access.has(sable_network::network::state::ChannelAccessFlag::ReceiveOp) {
+                                flags |= MembershipFlagFlag::Op;
+                            }
+                        }
+                    }
+                }
+
+                (channel.id(), flags)
             }
             Err(_) => {
                 let details = event::NewChannel {
