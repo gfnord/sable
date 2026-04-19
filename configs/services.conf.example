@@ -63,13 +63,13 @@
 
     "tls_config": {
         "key_file": "/sable/certs/services.key",
-        "cert_file": "/sable/certs/services.pem",
+        "cert_file": "/sable/certs/services.crt",
     },
 
     "node_config": {
         // Listen on all interfaces inside the container
         "listen_addr": "0.0.0.0:6668",
-        "cert_file": "/sable/certs/services.pem",
+        "cert_file": "/sable/certs/services.crt",
         "key_file": "/sable/certs/services.key",
     },
 

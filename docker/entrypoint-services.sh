@@ -35,7 +35,7 @@ check_certs() {
 
     local missing=false
 
-    for f in services.pem services.key ca_cert.pem; do
+    for f in services.crt services.key ca_cert.pem; do
         if [ ! -f "${CERT_DIR}/${f}" ]; then
             echo_error "Missing certificate: ${CERT_DIR}/${f}"
             missing=true
@@ -44,7 +44,7 @@ check_certs() {
 
     if [ "$missing" = true ]; then
         echo_error "Please provide all required certificates in ${CERT_DIR}:"
-        echo_error "  services.pem  - Services TLS certificate"
+        echo_error "  services.crt  - Services TLS certificate"
         echo_error "  services.key  - Services private key"
         echo_error "  ca_cert.pem   - CA certificate for inter-node authentication"
         exit 1
