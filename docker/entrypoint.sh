@@ -122,16 +122,13 @@ ARGS+=("-n" "${NETWORK_CONF}")
 ARGS+=("-s" "${SERVER_CONF}")
 ARGS+=("--foreground")
 
-# Only bootstrap on first run — on restarts, sync state from the gossip network.
-# Bootstrapping on every restart creates a fresh event log, breaking dependency
-# chains for events sent by services (which still reference old ircd event IDs).
-DATA_DIR="${SABLE_DATA_DIR:-/sable/data}"
-BOOTSTRAP_MARKER="${DATA_DIR}/.bootstrapped"
-if [ -n "${BOOTSTRAP_NETWORK}" ] && [ ! -f "${BOOTSTRAP_MARKER}" ]; then
+# Always bootstrap from the network config. ircd holds no persistent event log
+# state across restarts — it bootstraps fresh each time and the gossip layer
+# re-syncs ephemeral state. Bootstrapping is required so the gossip listener
+# starts immediately; without it, ircd and services deadlock trying to sync
+# from each other before either is listening.
+if [ -n "${BOOTSTRAP_NETWORK}" ]; then
     ARGS+=("--bootstrap-network" "${BOOTSTRAP_NETWORK}")
-    mkdir -p "${DATA_DIR}"
-    touch "${BOOTSTRAP_MARKER}"
-    echo_info "First boot — bootstrapping network from ${BOOTSTRAP_NETWORK}"
 fi
 
 # Pass through any additional arguments
