@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+# Dockerfile for Sable Services Node
+# Stage 1: Build environment (shared with main Dockerfile)
+FROM rust:1.83-slim AS builder
+
+RUN apt-get update && \
+    apt-get install -y \
+        pkg-config \
+        libssl-dev \
+        protobuf-compiler \
+        libpq-dev \
+        && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY . .
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release -p sable_services && \
+    cp target/release/sable_services /tmp/
+
+# Stage 2: Runtime environment
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates \
+        curl \
+        && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -r -s /bin/false -d /sable sable && \
+    mkdir -p /sable/config /sable/certs /sable/data && \
+    chown -R sable:sable /sable
+
+COPY --from=builder /tmp/sable_services /usr/local/bin/
+
+COPY docker/entrypoint-services.sh /usr/local/bin/entrypoint-services.sh
+RUN chmod +x /usr/local/bin/entrypoint-services.sh
+
+WORKDIR /sable
+
+USER sable
+
+# 6668/tcp - Server-to-server gossip (TLS)
+# 8888/tcp - Management HTTPS API
+EXPOSE 6668 8888
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -fks https://localhost:8888/ || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-services.sh"]

@@ -1,11 +1,25 @@
 {
+    // Number of peers each node forwards each event to.
+    // Tune based on network size vs. bandwidth trade-off.
     "fanout": 2,
-    "ca_file": "configs/ca_cert.pem",
 
+    // CA certificate used to validate all node TLS certificates.
+    // Must be the same on every node.
+    "ca_file": "/sable/certs/ca_cert.pem",
+
+    // All server nodes in the network, including ircd and services nodes.
+    // Every node must appear here with its gossip address and certificate fingerprint.
+    // Get the fingerprint with: openssl x509 -in <cert.pem> -fingerprint -sha1 -noout
     "peers": [
-        { "name": "server1.test", "address": "127.0.1.2:6668", "fingerprint": "1e73e460163a89fcadfd9acbc8fc115d6e4f3a81" },
-        { "name": "server2.test", "address": "127.0.1.3:6668", "fingerprint": "8bd6fbb218ddb36ec5f649f4243ece12777b572a" },
-        { "name": "services.test", "address": "127.0.1.4:6668", "fingerprint": "e42729000055e11e51056bacc34aa4c45d8defcc" },
-        { "name": "history.test", "address": "127.0.1.5:6668", "fingerprint": "a9fa5431bca6ad1b09584713549a39a71ade7ddb" },
+        {
+            "name": "irc.example.com",
+            "address": "sable-ircd-1:6668",
+            "fingerprint": "replace-with-sha1-fingerprint-of-ircd-cert"
+        },
+        {
+            "name": "services.example.com",
+            "address": "sable-services:6668",
+            "fingerprint": "replace-with-sha1-fingerprint-of-services-cert"
+        },
     ]
 }

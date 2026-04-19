@@ -123,6 +123,7 @@ See [`docs/configuration.md`](docs/configuration.md) for full configuration refe
 - [`docs/state-events-and-history.md`](docs/state-events-and-history.md) — Network state, events, and history internals
 - [`docs/netsplits.md`](docs/netsplits.md) — How netsplits are handled
 - [`docs/command-handlers.md`](docs/command-handlers.md) — Writing IRC command handlers
+- [`docs/deploying-services.md`](docs/deploying-services.md) — Deploying the services node (NickServ/ChanServ)
 
 ---
 
