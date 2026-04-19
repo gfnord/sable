@@ -1,120 +1,131 @@
-# Sable, a chat server
+# Sable IRC Server
 
-<!-- spell-checker: words identd rustup ircd -->
+> **This is a fork of [Libera-Chat/sable](https://github.com/Libera-Chat/sable) and is moving in a different direction.**
+> Development here focuses on production deployability, privacy features, and IRC protocol completeness.
+> Upstream changes may be selectively merged, but this fork is not intended to track upstream exactly.
 
-Sable is an experimental chat server designed to address many of the fundamental limitations of legacy
-IRC server software. In particular:
+---
 
-- Server linking and network state tracking are completely separated from client protocol mechanics.
-- Server nodes communicate using a Gossip-like protocol, removing the need for a spanning-tree routing
-   and making netsplits, as they occur in legacy servers, a thing of the past. While a server may still
-   become isolated from the network due to networking faults, the loss of a single connection will not
-   disrupt the network.
-- All network state events are uniquely identified, and dependencies between them are tracked. Despite
-   the arbitrarily-connected Gossip network, duplicate or out-of-order processing of events will not
-   occur.
-- Complete network state history allows persistent user presence. Users can remain online when their
-   clients disconnect, and can have multiple client connections, potentially on different servers, to
-   a single user session.
-- Instead of dynamic module loading and all the complications it can cause, server code upgrades are
-   handled by re-executing the server in-place and resuming from saved state information. A further
-   advantage is that there is no 'core' that cannot be upgraded without visible disruption.
-
-## Architecture
-
-Things are still changing too much to draw a diagram here. The foundational principles are:
-
-- Every network object (user, channel, channel topic, channel ban, etc.) has a unique identifier.
-- Every change to network state is represented by an `Event`. All events have a target object which
-   they modify, a globally-unique event ID, an event clock containing its dependency information, other
-   metadata, and a typed details structure describing the change being made.
-- Events are propagated between servers via a gossip protocol.
-- Each server maintains an event log. An incoming event is added to the log only when all its
-   dependencies have been added and processed. If an incoming event has missing dependencies, they are
-   requested from the network.
-- A server's view of network state is only ever updated by processing `Event`s emitted by the event log.
-   Event application is careful to ensure that any valid order of application for a set of events will
-   eventually produce the same state.
-- All other code runs with a read-only view of network state. If updates need to be made, this is done
-   by emitting an event for propagation and processing by the event log.
-- There is no such thing as a netjoin. When a server starts up, it will not process any client
-   connections until it has synced to a network, unless it has been specifically told to bootstrap a new
-   network. If a server becomes completely detached from the network and cannot exchange events, it will
-   be disconnected from the network permanently until it restarts.
-
-Some other design decisions which are not as fundamental but are worth mentioning:
-
-- Client listeners and DNS/identd connections are farmed out into a separate process to make seamless
-   code upgrades easier.
-- Server and network maintenance operations are performed via an out-of-band HTTP management service,
-   not via IRC client connections.
-
-## Navigating the code
-
-Currently, Sable is split into several crates:
-
-- `sable_network` contains all of the network data model and logic for running a network server. This
-    includes state tracking but no client protocol logic.
-  - `sable_network::network` contains the `Network` type which represents network state and handles
-      event application and conflict resolution, as well as the various state objects and convenience wrappers
-      that make up a network. It also contains definitions of the event types.
-  - `sable_network::history` contains the `NetworkHistoryLog` type which represents the network history
-      as it is visible to each user of the network
-  - `sable_network::sync` contains the network synchronisation code
-  - `sable_network::node` contains the `NetworkNode` struct which manages synchronisation and communication
-      with the rest of the network
-- `sable_server` contains generic code to run a network node and plug in node-specific functionality (such
-    as a client server or services node)
-- `sable_ircd` contains the IRC client server
-- `sable_services` contains the special-purpose services node, which maintains a network-wide source of
-    truth for account and registration data.
-- `client_listener` and `auth_client` contain split-out parts of the client server which run in their
-    own processes.
-- `sable_ipc` contains IPC channel types used by the split-out processes to communicate with the main
-    client server.
-- `sable_macros` contains procedural macros used by the other crates.
-
-## Building Sable
-
-1. Install rust. [The rust people say you should use rustup.](https://www.rust-lang.org/tools/install)
-2. Clone this repo.
-3. `cargo build`
-
-## Running Sable
-
-There's a sample set of configs and certificates in the `configs` directory, which will run a network of
-two servers on 127.0.1.2 and 127.0.1.3, both using 6667 and 6697 for client connections, and 6668 for server
-linking. To run them:
-
-```bash
-./target/debug/sable_ircd -n configs/network.conf -s configs/server1.conf --bootstrap-network configs/network_config.json
-./target/debug/sable_ircd -n configs/network.conf -s configs/server2.conf
-```
-
-There are two types of network configuration. At present, the list of nodes and their network addresses
-is static, and read only at startup. This is what's in the `network.conf` file, which should be shared
-between all server nodes. Runtime configuration currently consists of operator credentials, and is
-contained in a separate file (`network_config.json` in the examples). This can be loaded via the command
-line when bootstrapping a new network, or updated at runtime via the `config_loader` utility.
-
-## New implementations
-
-This fork includes several enhancements beyond the upstream Libera-Chat/sable:
+## What's New in This Fork
 
 ### IRC Commands
 
-- **LIST command** (`/LIST`) - Lists all channels on the server or a specific channel. Shows channel name, visible member count, and topic. Respects secret (+s) mode by only showing secret channels to members.
+- **`LIST`** — Lists all channels on the server. Shows channel name, visible member count, and topic. Respects secret (`+s`) mode by hiding secret channels from non-members.
 
-### Privacy Features
+### Privacy
 
-- **Hash-based hostname cloaking** - Client IP addresses are automatically cloaked using a one-way hash function. This hides user IPs from other users while maintaining consistent cloaked hostnames for the same user.
+- **Hash-based hostname cloaking** — Client IP addresses are automatically replaced with a deterministic SHA-256 cloak (`<32-hex-chars>.cloaked`), keyed by a server-configured secret. Users are never exposed to other clients, and the same IP always receives the same cloak within a network.
 
 ### Deployment
 
-- **Docker Compose infrastructure** - Complete Docker deployment setup with Caddy for automatic TLS certificate management via Let's Encrypt
-- **Single-node bootstrap mode** - Simplified bootstrap process for standalone server deployment
-- **Configuration templates** - Production config files renamed to `.example` suffix to prevent accidental credential commits
+- **Docker Compose setup** — Production-ready containerized deployment with BuildKit cache mounts for fast rebuilds.
+- **Configuration templates** — Config files ship as `.example` templates to prevent accidental credential commits.
 
-### Installation
+---
 
-See `INSTALLATION.md` for detailed deployment instructions, including Docker setup, certificate management, and troubleshooting common issues.
+## Overview
+
+Sable is an experimental IRC server designed to address fundamental limitations of legacy IRC software:
+
+- **No spanning tree** — Servers communicate via a Gossip-like mesh protocol. A single lost connection does not disrupt the network.
+- **Unique event IDs** — Every state change is an `Event` with a globally unique ID and dependency tracking. Duplicate or out-of-order processing cannot occur.
+- **Persistent user presence** — Complete network history allows users to remain online when clients disconnect, and to connect from multiple clients simultaneously.
+- **Zero-disruption upgrades** — Instead of module loading, upgrades are handled by re-executing the server in-place and resuming from saved state.
+
+---
+
+## Architecture
+
+- Every network object (user, channel, ban, topic, etc.) has a unique identifier.
+- Every state change is an `Event` with a globally unique ID, dependency clock, and typed details struct.
+- Events propagate between servers via gossip. Each server maintains an event log that ensures events are applied only after all dependencies are met.
+- Network state is read-only except via event processing. Any valid application order for a set of events produces the same final state.
+- There are no netjoins. A server will not accept clients until it has fully synced to the network, unless bootstrapping a new one.
+
+See [`docs/state-events-and-history.md`](docs/state-events-and-history.md) for a detailed explanation.
+
+---
+
+## Crate Structure
+
+| Crate | Purpose |
+|---|---|
+| `sable_network` | Network data model, event log, state tracking, gossip sync |
+| `sable_ircd` | IRC client protocol server |
+| `sable_services` | Services node — account and registration data |
+| `sable_server` | Generic network node runner |
+| `sable_history` | Long-term channel history (SQL-backed) |
+| `client_listener` | Split-out client listener process |
+| `auth_client` | Split-out DNS/ident lookup process |
+| `sable_ipc` | IPC channel types for split-out processes |
+| `sable_macros` | Procedural macros |
+
+---
+
+## Building
+
+**Requirements:** Rust (install via [rustup](https://www.rust-lang.org/tools/install))
+
+```bash
+git clone https://github.com/gfnord/sable
+cd sable
+cargo build --release
+```
+
+For faster incremental rebuilds with Docker:
+
+```bash
+DOCKER_BUILDKIT=1 docker compose up -d --build
+```
+
+---
+
+## Running
+
+### Local (development)
+
+```bash
+# Bootstrap a new single-node network
+./target/debug/sable_ircd \
+  -n configs/network.conf \
+  -s configs/server.conf \
+  --bootstrap-network configs/network_config.json
+```
+
+### Docker
+
+See [`INSTALLATION.md`](INSTALLATION.md) for full Docker deployment instructions including TLS, certificate management, and multi-server setups.
+
+---
+
+## Configuration
+
+There are two configuration layers:
+
+- **`network.conf`** — Static network topology (server addresses, TLS fingerprints). Shared across all nodes. Read only at startup.
+- **`network_config.json`** — Runtime config (oper credentials, cloaking key, channel roles). Can be updated at runtime via the `config_loader` utility.
+
+Copy the `.example` files to get started:
+
+```bash
+cp configs/network.conf.example configs/network.conf
+cp configs/network_config.json.example configs/network_config.json
+```
+
+See [`docs/configuration.md`](docs/configuration.md) for full configuration reference.
+
+---
+
+## Documentation
+
+- [`docs/configuration.md`](docs/configuration.md) — Configuration reference
+- [`docs/server-linking.md`](docs/server-linking.md) — Server linking and gossip protocol
+- [`docs/state-events-and-history.md`](docs/state-events-and-history.md) — Network state, events, and history internals
+- [`docs/netsplits.md`](docs/netsplits.md) — How netsplits are handled
+- [`docs/command-handlers.md`](docs/command-handlers.md) — Writing IRC command handlers
+
+---
+
+## License
+
+See upstream [Libera-Chat/sable](https://github.com/Libera-Chat/sable) for license information.
