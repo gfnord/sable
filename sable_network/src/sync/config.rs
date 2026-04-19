@@ -112,18 +112,29 @@ impl NodeConfig {
             .map(Certificate)
             .collect();
 
-        let key_file = File::open(&self.key_file)
+        let key_data = std::fs::read(&self.key_file)
             .map_err(|e| ConfigError::IoError(e, self.key_file.clone()))?;
-        let mut key_reader = BufReader::new(key_file);
-        let client_key = rustls_pemfile::rsa_private_keys(&mut key_reader)
-            .map_err(|e| ConfigError::IoError(e, self.key_file.clone()))?
-            .pop()
-            .ok_or_else(|| {
-                ConfigError::FormatError(
-                    "No private key in file".to_string(),
-                    self.key_file.clone(),
-                )
-            })?;
+
+        let client_key = {
+            let mut reader = BufReader::new(key_data.as_slice());
+            rustls_pemfile::rsa_private_keys(&mut reader)
+                .map_err(|e| ConfigError::IoError(e, self.key_file.clone()))?
+                .into_iter()
+                .next()
+        }
+        .or_else(|| {
+            let mut reader = BufReader::new(key_data.as_slice());
+            rustls_pemfile::pkcs8_private_keys(&mut reader)
+                .ok()?
+                .into_iter()
+                .next()
+        })
+        .ok_or_else(|| {
+            ConfigError::FormatError(
+                "No private key in file".to_string(),
+                self.key_file.clone(),
+            )
+        })?;
 
         Ok((cert_chain, PrivateKey(client_key)))
     }
