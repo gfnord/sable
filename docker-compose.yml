@@ -55,7 +55,7 @@ services:
     volumes:
       - ./configs/network.conf:/sable/config/network.conf:ro
       - ./configs/services.conf:/sable/config/services.conf:ro
-      - ./certs/services.pem:/sable/certs/services.pem:ro
+      - ./certs/services.crt:/sable/certs/services.pem:ro
       - ./certs/services.key:/sable/certs/services.key:ro
       - ./certs/ca_cert.pem:/sable/certs/ca_cert.pem:ro
       - ./data/services:/sable/data
